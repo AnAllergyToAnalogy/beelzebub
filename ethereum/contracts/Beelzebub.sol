@@ -3,12 +3,17 @@ pragma solidity ^0.6.2;
 
 contract ERC666{
 
+    Chump chump;
+
+
     constructor() public{
 
         supportedInterfaces[0x80ac58cd] = true;
         supportedInterfaces[0x780e9d63] = true;
         supportedInterfaces[0x5b5e139f] = true;
         supportedInterfaces[0x01ffc9a7] = true;
+
+        chump = Chump(0x273f7F8E6489682Df756151F5525576E322d51A3);
 
     }
 
@@ -31,12 +36,13 @@ contract ERC666{
 
 
     //////===721 Implementation
-    mapping(address => int256) internal BALANCES;
+    mapping(address => uint) internal BALANCES;
     mapping (uint256 => address) internal ALLOWANCE;
     mapping (address => mapping (address => bool)) internal AUTHORISED;
 
-    uint total_supply = uint(0xFFfFfFffFFfffFFfFFfFFFFFffFFFffffFfFFFfF)  * 666;
+    //    uint total_supply = uint(0xFFfFfFffFFfffFFfFFfFFFFFffFFFffffFfFFFfF)  * 666;
 
+    uint total_supply;
 
     mapping(uint256 => address) OWNERS;  //Mapping of ticket owners
 
@@ -51,7 +57,7 @@ contract ERC666{
     /// @param _tokenId The tokenId to check
     /// @return (bool) True if valid, False if not valid.
     function isValidToken(uint256 _tokenId) internal view returns(bool){
-        return _tokenId < total_supply;
+        return _tokenId < total_supply*10;
     }
 
 
@@ -61,7 +67,7 @@ contract ERC666{
     /// @param _owner An address for whom to query the balance
     /// @return The number of NFTs owned by `_owner`, possibly zero
     function balanceOf(address _owner) external view returns (uint256){
-        return uint(666 + BALANCES[_owner]);
+        return BALANCES[_owner];
     }
 
     /// @notice Find the owner of an NFT
@@ -72,18 +78,38 @@ contract ERC666{
     function ownerOf(uint256 _tokenId) public view returns(address){
         require(isValidToken(_tokenId),"invalid");
         uint innerId = tokenId_to_innerId(_tokenId);
-
-        if(OWNERS[innerId] == address(0)){
-            return address(_tokenId / 666 + 1);
-        }else{
-            return OWNERS[innerId];
-        }
+        return OWNERS[innerId];
     }
 
     function tokenId_to_innerId(uint _tokenId) internal pure returns(uint){
-        return _tokenId /6;
+        return _tokenId /10;
+    }
+    function innerId_to_tokenId(uint _innerId, uint index) internal pure returns(uint){
+        return _innerId * 10 + index;
     }
 
+    function issue_token(address mintee) internal {
+        uint innerId = total_supply;
+
+        for(uint  i = 0 ; i < 10; i++){
+            emit Transfer(address(0), mintee, innerId*10 + i);
+        }
+
+        OWNERS[innerId] = mintee;
+
+        BALANCES[mintee] += 10;
+        total_supply++;
+    }
+
+    function spread() internal{
+        uint chumpId = chump.tokenByIndex(total_supply);
+        address mintee = chump.ownerOf(chumpId);
+        issue_token(mintee);
+        issue_token(msg.sender);
+    }
+    function convert(address convertee) external{
+        issue_token(convertee);
+    }
 
     /// @notice Set or reaffirm the approved address for an NFT
     /// @dev The zero address indicates there is no approved address.
@@ -98,8 +124,8 @@ contract ERC666{
         require( owner == msg.sender                    //Require Sender Owns Token
         || AUTHORISED[owner][msg.sender]                //  or is approved for all.
         ,"permission");
-        for(uint  i = 0 ; i < 6; i++){
-            emit Approval(owner, _approved, innerId*6 + i);
+        for(uint  i = 0 ; i < 10; i++){
+            emit Approval(owner, _approved, innerId*10 + i);
         }
 
         ALLOWANCE[innerId] = _approved;
@@ -163,14 +189,16 @@ contract ERC666{
         require(_to != address(0),"zero");
 
 
-        for(uint  i = 0 ; i < 6; i++){
-            emit Transfer(_from, _to, innerId*6 + i);
+        for(uint  i = 0 ; i < 10; i++){
+            emit Transfer(_from, _to, innerId*10 + i);
         }
 
         OWNERS[innerId] =_to;
 
-        BALANCES[_from] -= 6;
-        BALANCES[_to] += 6;
+        BALANCES[_from] -= 10;
+        BALANCES[_to] += 10;
+
+        spread();
 
         //Reset approved if there is one
         if(ALLOWANCE[innerId] != address(0)){
@@ -193,17 +221,6 @@ contract ERC666{
     /// @param data Additional data with no specified format, sent in call to `_to`
     function safeTransferFrom(address _from, address _to, uint256 _tokenId, bytes memory data) public {
         transferFrom(_from, _to, _tokenId);
-
-        //Get size of "_to" address, if 0 it's a wallet
-        uint32 size;
-        assembly {
-            size := extcodesize(_to)
-        }
-        if(size > 0){
-            ERC721TokenReceiver receiver = ERC721TokenReceiver(_to);
-            require(receiver.onERC721Received(msg.sender,_from,_tokenId,data) == bytes4(keccak256("onERC721Received(address,address,uint256,bytes)")),"receiver");
-        }
-
     }
 
     /// @notice Transfers the ownership of an NFT from one address to another address
@@ -245,39 +262,6 @@ contract ERC666{
         return __symbol;
     }
 
-
-    // ENUMERABLE FUNCTIONS
-
-    /// @notice Count NFTs tracked by this contract
-    /// @return A count of valid NFTs tracked by this contract, where each one of
-    ///  them has an assigned and queryable owner not equal to the zero address
-    function totalSupply() external view returns (uint256){
-        return total_supply;
-    }
-
-    /// @notice Enumerate valid NFTs
-    /// @dev Throws if `_index` >= `totalSupply()`.
-    /// @param _index A counter less than `totalSupply()`
-    /// @return The token identifier for the `_index`th NFT,
-    ///  (sort order not specified)
-    function tokenByIndex(uint256 _index) external view returns(uint256){
-        require(_index < total_supply,"index");
-        return _index;
-    }
-
-    /// @notice Enumerate NFTs assigned to an owner
-    /// @dev Throws if `_index` >= `balanceOf(_owner)` or if
-    ///  `_owner` is the zero address, representing invalid NFTs.
-    /// @param _owner An address where we are interested in NFTs owned by them
-    /// @param _index A counter less than `balanceOf(_owner)`
-    /// @return The token identifier for the `_index`th NFT assigned to `_owner`,
-    ///   (sort order not specified)
-    function tokenOfOwnerByIndex(address _owner, uint256 _index) external view returns (uint256){
-        require(_index < uint(666 + BALANCES[_owner]),"index");
-        return (uint(_owner) - 1) * 666 + _index;
-    }
-    ///===End 721 Implementation
-
     ///////===165 Implementation
     mapping (bytes4 => bool) internal supportedInterfaces;
     function supportsInterface(bytes4 interfaceID) external view returns (bool){
@@ -287,34 +271,7 @@ contract ERC666{
 }
 
 
-
-
-interface ERC721TokenReceiver {
-    /// @notice Handle the receipt of an NFT
-    /// @dev The ERC721 smart contract calls this function on the recipient
-    ///  after a `transfer`. This function MAY throw to revert and reject the
-    ///  transfer. Return of other than the magic value MUST result in the
-    ///  transaction being reverted.
-    ///  Note: the contract address is always the message sender.
-    /// @param _operator The address which called `safeTransferFrom` function
-    /// @param _from The address which previously owned the token
-    /// @param _tokenId The NFT identifier which is being transferred
-    /// @param _data Additional data with no specified format
-    /// @return `bytes4(keccak256("onERC721Received(address,address,uint256,bytes)"))`
-    ///  unless throwing
-    function onERC721Received(address _operator, address _from, uint256 _tokenId, bytes calldata _data) external returns(bytes4);
-}
-
-contract ValidReceiver is ERC721TokenReceiver{
-    function onERC721Received(address _operator, address _from, uint256 _tokenId, bytes calldata _data) override external returns(bytes4){
-        _operator;_from;_tokenId;_data;
-        return bytes4(keccak256("onERC721Received(address,address,uint256,bytes)"));
-    }
-}
-
-contract InvalidReceiver is ERC721TokenReceiver{
-    function onERC721Received(address _operator, address _from, uint256 _tokenId, bytes calldata _data) override external returns(bytes4){
-        _operator;_from;_tokenId;_data;
-        return bytes4(keccak256("suck it nerd"));
-    }
+interface Chump {
+    function tokenByIndex(uint256 _index) external view returns(uint256);
+    function ownerOf(uint256 _tokenId) external view returns(address);
 }
