@@ -9,7 +9,7 @@ contract ERC666{
     constructor() public{
 
         supportedInterfaces[0x80ac58cd] = true;
-        supportedInterfaces[0x780e9d63] = true;
+//        supportedInterfaces[0x780e9d63] = true; //enumerable
         supportedInterfaces[0x5b5e139f] = true;
         supportedInterfaces[0x01ffc9a7] = true;
 
@@ -17,7 +17,8 @@ contract ERC666{
 
     }
 
-    /// @dev This emits when ownership of any NFT changes by any mechanism.
+
+    // @dev This emits when ownership of any NFT changes by any mechanism.
     ///  This event emits when NFTs are created (`from` == 0) and destroyed
     ///  (`to` == 0). Exception: during contract creation, any number of NFTs
     ///  may be created and assigned without emitting Transfer. At the time of
@@ -33,6 +34,7 @@ contract ERC666{
     /// @dev This emits when an operator is enabled or disabled for an owner.
     ///  The operator can manage all NFTs of the owner.
     event ApprovalForAll(address indexed _owner, address indexed _operator, bool _approved);
+
 
 
     //////===721 Implementation
@@ -268,6 +270,16 @@ contract ERC666{
         return supportedInterfaces[interfaceID];
     }
     ///==End 165
+
+    //Play nice with agregator things
+    ///alligator
+
+    /// @notice Count NFTs tracked by this contract
+    /// @return A count of valid NFTs tracked by this contract, where each one of
+    ///  them has an assigned and queryable owner not equal to the zero address
+    function totalSupply() external view returns (uint256){
+        return total_supply * 10;
+    }
 }
 
 
